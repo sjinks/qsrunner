@@ -1,0 +1,262 @@
+#include <QtCore/QDebug>
+#include <QtCore/QFile>
+#include <QtCore/QFileInfo>
+#include <QtCore/QMap>
+#include <QtCore/QProcess>
+#include <QtCore/QStringBuilder>
+#include <QtCore/QStringList>
+#include <QtScript/QScriptEngine>
+#include <QtScript/QScriptProgram>
+#include <QtScript/QScriptValue>
+#include <QtScriptTools/QScriptEngineDebugger>
+#include <QApplication>
+#include <cstdio>
+#include "myapplication.h"
+
+static int g_retcode = 0;
+static MyApplication* g_inst = 0;
+
+QMap<QString, QScriptProgram> MyApplication::loaded_files;
+
+MyApplication::MyApplication(QCoreApplication* app, bool gui)
+	: QObject(0), m_gui(gui), m_app(app), m_eng(new QScriptEngine(this)), m_dbg(0)
+{
+	g_inst = this;
+
+	QObject::connect(this->m_eng, SIGNAL(signalHandlerException(QScriptValue)), this, SLOT(signalHandlerException(QScriptValue)));
+}
+
+int MyApplication::exec(void)
+{
+	if (this->m_gui) {
+		this->m_dbg = new QScriptEngineDebugger();
+		this->m_dbg->attachTo(this->m_eng);
+	}
+
+	QScriptValue global = this->m_eng->globalObject();
+	QScriptValue qs     = this->m_eng->newObject();
+	QScriptValue script = this->m_eng->newObject();
+	QScriptValue system = this->m_eng->newObject();
+
+	global.setProperty(QLatin1String("qs"), qs);
+	qs.setProperty(QLatin1String("script"), script);
+	qs.setProperty(QLatin1String("system"), system);
+
+	global.setProperty(QLatin1String("qApp"), this->m_eng->newQObject(this->m_app));
+
+	global.setProperty(QLatin1String("print"), this->m_eng->newFunction(MyApplication::print));
+
+	QScriptValue func_quit         = this->m_eng->newFunction(MyApplication::quit);
+	QScriptValue func_require      = this->m_eng->newFunction(MyApplication::require);
+	QScriptValue func_require_once = this->m_eng->newFunction(MyApplication::requireOnce);
+	QScriptValue func_import       = this->m_eng->newFunction(MyApplication::import);
+
+	script.setProperty(QLatin1String("quit"),                func_quit);
+	script.setProperty(QLatin1String("require"),             func_require);
+	script.setProperty(QLatin1String("requireOnce"),         func_require_once);
+	global.setProperty(QLatin1String("quit"),                func_quit);
+	global.setProperty(QLatin1String("require"),             func_require);
+	global.setProperty(QLatin1String("requireOnce"),         func_require_once);
+	script.setProperty(QLatin1String("extension"),           func_import);
+	global.setProperty(QLatin1String("import"),              func_import);
+	script.setProperty(QLatin1String("availableExtensions"), this->m_eng->newFunction(MyApplication::availableExtensions));
+
+	system.setProperty(QLatin1String("env"), this->buildEnvironment());
+
+	QStringList args = QCoreApplication::arguments();
+	args.takeFirst();
+
+	QString file = args.takeFirst();
+	script.setProperty(QLatin1String("args"), this->m_eng->toScriptValue(args));
+
+	QMetaObject::invokeMethod(this, "loadFile", Qt::QueuedConnection, Q_ARG(QString, file), Q_ARG(bool, false));
+	this->m_gui ? QApplication::exec() : QCoreApplication::exec();
+	return g_retcode;
+}
+
+void MyApplication::loadFile(const QString& name, bool once)
+{
+	if (!MyApplication::doLoadFile(name, this->m_eng, this->m_eng->currentContext(), once)) {
+		qCritical("There was an error loading file %s", qPrintable(name));
+		this->m_gui ? QApplication::exit(127) : QCoreApplication::exit(127);
+	}
+}
+
+void MyApplication::terminate(void)
+{
+	this->m_gui ? QApplication::processEvents() : QCoreApplication::processEvents();
+	QMetaObject::invokeMethod(g_inst->m_app, "quit", Qt::QueuedConnection);
+}
+
+void MyApplication::signalHandlerException(const QScriptValue& exception)
+{
+	qCritical("Uncaught exception from a signal handler");
+	if (exception.isError()) {
+		qCritical("%s", qPrintable(exception.toString()));
+	}
+	else {
+		qCritical("%s", qPrintable(exception.toString()));
+	}
+}
+
+QScriptValue MyApplication::buildEnvironment(void)
+{
+	QMap<QString, QVariant> result;
+	QStringList environment = QProcess::systemEnvironment();
+
+	for (int i=0; i<environment.size(); ++i) {
+		const QString& entry = environment.at(i);
+
+		QStringList key_val = entry.split(QLatin1Char('='));
+		if (1 == key_val.size()) {
+			result.insert(key_val.at(0), QString());
+		}
+		else {
+			result.insert(key_val.at(0), key_val.at(1));
+		}
+	}
+
+	return this->m_eng->toScriptValue(result);
+}
+
+bool MyApplication::doLoadFile(const QString& name, QScriptEngine* eng, QScriptContext* ctx, bool once)
+{
+	QFileInfo info(name);
+	QString current = eng->globalObject().property(QLatin1String("qs")).property(QLatin1String("script")).property(QLatin1String("absoluteFilePath")).toString();
+
+	if (!current.isEmpty() && info.isRelative()) {
+		QFileInfo current_info(current);
+
+		info.setFile(current_info.path() % QLatin1Char('/') % info.filePath());
+		Q_ASSERT(true == info.isAbsolute());
+	}
+
+	QString canonical = info.canonicalFilePath();
+	bool known_file   = MyApplication::loaded_files.contains(canonical);
+	if (once && known_file) {
+		return true;
+	}
+
+	QString absolute_fname = info.absoluteFilePath();
+	QString absolute_path  = info.absolutePath();
+
+	QScriptProgram script_text;
+
+	if (known_file) {
+		script_text = MyApplication::loaded_files[canonical];
+	}
+	else {
+		QFile file(canonical);
+		if (file.open(QIODevice::ReadOnly)) {
+			int lineno = 1;
+			QString contents = QString::fromLocal8Bit(file.readAll().constData());
+			file.close();
+
+			int pos = contents.indexOf(QLatin1Char('\n'));
+			QString line = contents.left(pos);
+			if (line.startsWith(QLatin1String("#!"))) {
+				contents.remove(pos+1);
+				++lineno;
+			}
+
+			script_text = QScriptProgram(contents, canonical, lineno);
+			MyApplication::loaded_files.insert(canonical, script_text);
+		}
+		else {
+			return false;
+		}
+	}
+
+	QScriptValue script = eng->globalObject().property(QLatin1String("qs")).property(QLatin1String("script"));
+
+	QScriptValue oldFilePathValue = script.property(QLatin1String("absoluteFilePath"));
+	QScriptValue oldPathValue     = script.property(QLatin1String("absolutePath"));
+
+	script.setProperty(QLatin1String("absoluteFilePath"), eng->toScriptValue(absolute_fname));
+	script.setProperty(QLatin1String("absolutePath"),     eng->toScriptValue(absolute_path));
+
+	if (ctx->parentContext()) {
+		ctx->setActivationObject(ctx->parentContext()->activationObject());
+		ctx->setThisObject(ctx->parentContext()->thisObject());
+	}
+
+	QScriptValue res = eng->evaluate(script_text);
+
+	script.setProperty(QLatin1String("absoluteFilePath"), oldFilePathValue);
+	script.setProperty(QLatin1String("absolutePath"),     oldPathValue);
+
+	if (eng->hasUncaughtException()) {
+		QStringList backtrace = eng->uncaughtExceptionBacktrace();
+		qWarning("%s", QString::fromLatin1("\t%1\n%2\n\n").arg(res.toString()).arg(backtrace.join(QLatin1String("\n"))).toLocal8Bit().constData());
+		eng->abortEvaluation(1);
+		qApp->exit(255);
+	}
+
+	return true;
+}
+
+QScriptValue MyApplication::import(QScriptContext* context, QScriptEngine* engine)
+{
+	return engine->importExtension(context->argument(0).toString());
+}
+
+QScriptValue MyApplication::availableExtensions(QScriptContext*, QScriptEngine* engine)
+{
+	return engine->toScriptValue(engine->availableExtensions());
+}
+
+QScriptValue MyApplication::print(QScriptContext* context, QScriptEngine* engine)
+{
+	QString result;
+	for (int i=0; i<context->argumentCount(); ++i) {
+		QString arg = context->argument(i).toString();
+		if (i && !arg[0].isSpace()) {
+			result.append(QLatin1Char(' '));
+		}
+
+		result.append(context->argument(i).toString());
+	}
+
+
+	std::fprintf(stdout, "%s", qPrintable(result));
+	std::fflush(stdout);
+	return engine->undefinedValue();
+}
+
+QScriptValue MyApplication::require(QScriptContext* context, QScriptEngine* engine)
+{
+	QString f(context->argument(0).toString());
+	if (!MyApplication::doLoadFile(f, engine, context, false)) {
+		return context->throwError(QString::fromLatin1("Failed to resolve include: %1").arg(f));
+	}
+
+	return engine->toScriptValue(true);
+}
+
+QScriptValue MyApplication::requireOnce(QScriptContext* context, QScriptEngine* engine)
+{
+	QString f(context->argument(0).toString());
+	if (!MyApplication::doLoadFile(f, engine, context, true)) {
+		return context->throwError(QString::fromLatin1("Failed to resolve include: %1").arg(f));
+	}
+
+	return engine->toScriptValue(true);
+}
+
+QScriptValue MyApplication::quit(QScriptContext* context, QScriptEngine* engine)
+{
+	QScriptValue rc(context->argumentCount() > 0 ? context->argument(0).toUInt32() : 0);
+	g_retcode = rc.toUInt32();
+
+	if (g_inst->m_dbg) {
+		g_inst->m_dbg->detach();
+		delete g_inst->m_dbg;
+		g_inst->m_dbg = 0;
+	}
+
+	engine->disconnect();
+	engine->abortEvaluation(rc);
+
+	QMetaObject::invokeMethod(g_inst, "terminate", Qt::QueuedConnection);
+	return rc;
+}
