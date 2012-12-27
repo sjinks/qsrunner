@@ -9,6 +9,7 @@
 #include <QtCore/QStringList>
 #include <QtScript/QScriptEngine>
 #include <QtScript/QScriptProgram>
+#include <QtScript/QScriptString>
 #include <QtScript/QScriptValue>
 #include <QtScriptTools/QScriptEngineDebugger>
 #include <QApplication>
@@ -19,6 +20,11 @@
 
 static int g_retcode = 0;
 static MyApplication* g_inst = 0;
+static QScriptString g_qs;
+static QScriptString g_script;
+static QScriptString g_system;
+static QScriptString g_ap;
+static QScriptString g_afp;
 
 QMap<QString, QScriptProgram> MyApplication::loaded_files;
 
@@ -26,6 +32,12 @@ MyApplication::MyApplication(QCoreApplication* app, bool gui)
 	: QObject(0), m_gui(gui), m_app(app), m_eng(new QScriptEngine(this)), m_dbg(0)
 {
 	g_inst = this;
+
+	g_qs     = this->m_eng->toStringHandle(QLatin1String("qs"));
+	g_script = this->m_eng->toStringHandle(QLatin1String("script"));
+	g_system = this->m_eng->toStringHandle(QLatin1String("system"));
+	g_ap     = this->m_eng->toStringHandle(QLatin1String("absolutePath"));
+	g_afp    = this->m_eng->toStringHandle(QLatin1String("absoluteFilePath"));
 
 	QObject::connect(this->m_eng, SIGNAL(signalHandlerException(QScriptValue)), this, SLOT(signalHandlerException(QScriptValue)));
 }
@@ -42,9 +54,9 @@ int MyApplication::exec(void)
 	QScriptValue script = this->m_eng->newObject();
 	QScriptValue system = this->m_eng->newObject();
 
-	global.setProperty(QLatin1String("qs"), qs);
-	qs.setProperty(QLatin1String("script"), script);
-	qs.setProperty(QLatin1String("system"), system);
+	global.setProperty(g_qs, qs);
+	qs.setProperty(g_script, script);
+	qs.setProperty(g_system, system);
 
 	global.setProperty(QLatin1String("qApp"), this->m_eng->newQObject(this->m_app));
 
@@ -95,12 +107,7 @@ void MyApplication::terminate(void)
 void MyApplication::signalHandlerException(const QScriptValue& exception)
 {
 	qCritical("Uncaught exception from a signal handler");
-	if (exception.isError()) {
-		qCritical("%s", qPrintable(exception.toString()));
-	}
-	else {
-		qCritical("%s", qPrintable(exception.toString()));
-	}
+	qCritical("%s", qPrintable(exception.toString()));
 }
 
 QScriptValue MyApplication::buildEnvironment(void)
@@ -126,7 +133,12 @@ QScriptValue MyApplication::buildEnvironment(void)
 bool MyApplication::doLoadFile(const QString& name, QScriptEngine* eng, QScriptContext* ctx, bool once)
 {
 	QFileInfo info(name);
-	QString current = eng->globalObject().property(QLatin1String("qs")).property(QLatin1String("script")).property(QLatin1String("absoluteFilePath")).toString();
+
+	QScriptValue script           = eng->globalObject().property(g_qs).property(g_script);
+	QScriptValue oldFilePathValue = script.property(g_afp);
+	QScriptValue oldPathValue     = script.property(g_ap);
+
+	QString current = oldFilePathValue.toString();
 
 	if (!current.isEmpty() && info.isRelative()) {
 		QFileInfo current_info(current);
@@ -170,13 +182,8 @@ bool MyApplication::doLoadFile(const QString& name, QScriptEngine* eng, QScriptC
 		}
 	}
 
-	QScriptValue script = eng->globalObject().property(QLatin1String("qs")).property(QLatin1String("script"));
-
-	QScriptValue oldFilePathValue = script.property(QLatin1String("absoluteFilePath"));
-	QScriptValue oldPathValue     = script.property(QLatin1String("absolutePath"));
-
-	script.setProperty(QLatin1String("absoluteFilePath"), eng->toScriptValue(absolute_fname));
-	script.setProperty(QLatin1String("absolutePath"),     eng->toScriptValue(absolute_path));
+	script.setProperty(g_afp, eng->toScriptValue(absolute_fname));
+	script.setProperty(g_ap,  eng->toScriptValue(absolute_path));
 
 	if (ctx->parentContext()) {
 		ctx->setActivationObject(ctx->parentContext()->activationObject());
@@ -185,8 +192,8 @@ bool MyApplication::doLoadFile(const QString& name, QScriptEngine* eng, QScriptC
 
 	QScriptValue res = eng->evaluate(script_text);
 
-	script.setProperty(QLatin1String("absoluteFilePath"), oldFilePathValue);
-	script.setProperty(QLatin1String("absolutePath"),     oldPathValue);
+	script.setProperty(g_afp, oldFilePathValue);
+	script.setProperty(g_ap,  oldPathValue);
 
 	if (eng->hasUncaughtException()) {
 		QStringList backtrace = eng->uncaughtExceptionBacktrace();
