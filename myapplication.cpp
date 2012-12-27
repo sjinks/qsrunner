@@ -191,7 +191,7 @@ bool MyApplication::doLoadFile(const QString& name, QScriptEngine* eng, QScriptC
 
 	if (eng->hasUncaughtException()) {
 		QStringList backtrace = eng->uncaughtExceptionBacktrace();
-		qWarning("%s", QString::fromLatin1("\t%1\n%2\n\n").arg(res.toString()).arg(backtrace.join(QLatin1String("\n"))).toLocal8Bit().constData());
+		qWarning("%s", qPrintable(QString::fromLatin1("\t%1\n%2\n\n").arg(res.toString()).arg(backtrace.join(QLatin1String("\n")))));
 		eng->abortEvaluation(1);
 		qApp->exit(255);
 	}
