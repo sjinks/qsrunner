@@ -156,9 +156,8 @@ bool MyApplication::doLoadFile(const QString& name, QScriptEngine* eng, QScriptC
 			QString contents = QString::fromLocal8Bit(file.readAll().constData());
 			file.close();
 
-			int pos = contents.indexOf(QLatin1Char('\n'));
-			QString line = contents.left(pos);
-			if (line.startsWith(QLatin1String("#!"))) {
+			if (contents.startsWith(QLatin1String("#!"))) {
+				int pos = contents.indexOf(QLatin1Char('\n'));
 				contents.remove(pos+1);
 				++lineno;
 			}
