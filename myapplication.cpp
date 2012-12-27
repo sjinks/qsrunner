@@ -1,3 +1,5 @@
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
 #include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -10,7 +12,9 @@
 #include <QtScript/QScriptValue>
 #include <QtScriptTools/QScriptEngineDebugger>
 #include <QApplication>
+#pragma GCC diagnostic pop
 #include <cstdio>
+#include <stdexcept>
 #include "myapplication.h"
 
 static int g_retcode = 0;
@@ -208,15 +212,21 @@ QScriptValue MyApplication::availableExtensions(QScriptContext*, QScriptEngine* 
 QScriptValue MyApplication::print(QScriptContext* context, QScriptEngine* engine)
 {
 	QString result;
+	bool starts_with_space = false;
+	bool ends_with_space   = true;
 	for (int i=0; i<context->argumentCount(); ++i) {
 		QString arg = context->argument(i).toString();
-		if (i && !arg[0].isSpace()) {
-			result.append(QLatin1Char(' '));
+		if (!arg.isEmpty()) {
+			starts_with_space = arg[0].isSpace();
+			if (!ends_with_space && !starts_with_space) {
+				result.append(QLatin1Char(' '));
+			}
+
+			ends_with_space = arg[arg.length()-1].isSpace();
 		}
 
 		result.append(context->argument(i).toString());
 	}
-
 
 	std::fprintf(stdout, "%s", qPrintable(result));
 	std::fflush(stdout);
