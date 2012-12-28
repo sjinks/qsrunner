@@ -268,7 +268,7 @@ QScriptValue MyApplication::quit(QScriptContext* context, QScriptEngine* engine)
 
 	if (g_inst->m_dbg) {
 		g_inst->m_dbg->detach();
-		delete g_inst->m_dbg;
+		g_inst->m_dbg->deleteLater();
 		g_inst->m_dbg = 0;
 	}
 
