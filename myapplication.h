@@ -31,8 +31,6 @@ private:
 
 	static QMap<QString, QScriptProgram> loaded_files;
 
-	QScriptValue buildEnvironment(void);
-
 	static bool doLoadFile(const QString& name, QScriptEngine* eng, QScriptContext* ctx, bool once);
 
 	static QScriptValue import(QScriptContext* context, QScriptEngine* engine);
@@ -41,6 +39,7 @@ private:
 	static QScriptValue require(QScriptContext* context, QScriptEngine* engine);
 	static QScriptValue requireOnce(QScriptContext* context, QScriptEngine* engine);
 	static QScriptValue quit(QScriptContext* context, QScriptEngine* engine);
+	static QScriptValue buildEnvironment(QScriptContext* context, QScriptEngine* engine);
 };
 
 #endif // MYAPPLICATION_H

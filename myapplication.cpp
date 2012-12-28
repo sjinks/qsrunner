@@ -77,7 +77,8 @@ int MyApplication::exec(void)
 	global.setProperty(QLatin1String("import"),              func_import);
 	script.setProperty(QLatin1String("availableExtensions"), this->m_eng->newFunction(MyApplication::availableExtensions));
 
-	system.setProperty(QLatin1String("env"), this->buildEnvironment());
+	QScriptValue buildenv = this->m_eng->newFunction(MyApplication::buildEnvironment);
+	system.setProperty(QLatin1String("env"), buildenv, QScriptValue::ReadOnly | QScriptValue::Undeletable | QScriptValue::PropertyGetter);
 
 	QStringList args = QCoreApplication::arguments();
 	args.takeFirst();
@@ -109,8 +110,10 @@ void MyApplication::signalHandlerException(const QScriptValue& exception)
 	qCritical("Uncaught exception from a signal handler: %s", qPrintable(exception.toString()));
 }
 
-QScriptValue MyApplication::buildEnvironment(void)
+QScriptValue MyApplication::buildEnvironment(QScriptContext* ctx, QScriptEngine* eng)
 {
+	Q_UNUSED(ctx)
+
 	QMap<QString, QVariant> result;
 	QStringList environment = QProcessEnvironment::systemEnvironment().toStringList();
 
@@ -126,7 +129,7 @@ QScriptValue MyApplication::buildEnvironment(void)
 		}
 	}
 
-	return this->m_eng->toScriptValue(result);
+	return eng->toScriptValue(result);
 }
 
 bool MyApplication::doLoadFile(const QString& name, QScriptEngine* eng, QScriptContext* ctx, bool once)
