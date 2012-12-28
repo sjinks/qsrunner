@@ -4,7 +4,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMap>
-#include <QtCore/QProcess>
+#include <QtCore/QProcessEnvironment>
 #include <QtCore/QStringBuilder>
 #include <QtCore/QStringList>
 #include <QtScript/QScriptEngine>
@@ -113,7 +113,7 @@ void MyApplication::signalHandlerException(const QScriptValue& exception)
 QScriptValue MyApplication::buildEnvironment(void)
 {
 	QMap<QString, QVariant> result;
-	QStringList environment = QProcess::systemEnvironment();
+	QStringList environment = QProcessEnvironment::systemEnvironment().toStringList();
 
 	for (int i=0; i<environment.size(); ++i) {
 		const QString& entry = environment.at(i);
