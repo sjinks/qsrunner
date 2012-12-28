@@ -106,8 +106,7 @@ void MyApplication::terminate(void)
 
 void MyApplication::signalHandlerException(const QScriptValue& exception)
 {
-	qCritical("Uncaught exception from a signal handler");
-	qCritical("%s", qPrintable(exception.toString()));
+	qCritical("Uncaught exception from a signal handler: %s", qPrintable(exception.toString()));
 }
 
 QScriptValue MyApplication::buildEnvironment(void)
