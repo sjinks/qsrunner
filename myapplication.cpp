@@ -44,7 +44,7 @@ MyApplication::MyApplication(QCoreApplication* app, bool gui)
 
 int MyApplication::exec(void)
 {
-	if (this->m_gui) {
+	if (this->m_gui && !qgetenv("QSRUNNER_NO_DEBUGGER").isEmpty()) {
 		this->m_dbg = new QScriptEngineDebugger();
 		this->m_dbg->attachTo(this->m_eng);
 	}
