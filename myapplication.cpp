@@ -1,6 +1,3 @@
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wconversion"
-#include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMap>
@@ -13,9 +10,7 @@
 #include <QtScript/QScriptValue>
 #include <QtScriptTools/QScriptEngineDebugger>
 #include <QApplication>
-#pragma GCC diagnostic pop
 #include <cstdio>
-#include <stdexcept>
 #include "myapplication.h"
 
 static int g_retcode = 0;
