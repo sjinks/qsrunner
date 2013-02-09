@@ -25,6 +25,9 @@ static QScriptString g_script;
 static QScriptString g_system;
 static QScriptString g_ap;
 static QScriptString g_afp;
+static QScriptString g_quit;
+static QScriptString g_req;
+static QScriptString g_ronce;
 
 QMap<QString, QScriptProgram> MyApplication::loaded_files;
 
@@ -38,6 +41,9 @@ MyApplication::MyApplication(QCoreApplication* app, bool gui)
 	g_system = this->m_eng->toStringHandle(QLatin1String("system"));
 	g_ap     = this->m_eng->toStringHandle(QLatin1String("absolutePath"));
 	g_afp    = this->m_eng->toStringHandle(QLatin1String("absoluteFilePath"));
+	g_quit   = this->m_eng->toStringHandle(QLatin1String("quit"));
+	g_req    = this->m_eng->toStringHandle(QLatin1String("require"));
+	g_ronce  = this->m_eng->toStringHandle(QLatin1String("requireOnce"));
 
 	QObject::connect(this->m_eng, SIGNAL(signalHandlerException(QScriptValue)), this, SLOT(signalHandlerException(QScriptValue)));
 }
@@ -67,12 +73,13 @@ int MyApplication::exec(void)
 	QScriptValue func_require_once = this->m_eng->newFunction(MyApplication::requireOnce);
 	QScriptValue func_import       = this->m_eng->newFunction(MyApplication::import);
 
-	script.setProperty(QLatin1String("quit"),                func_quit);
-	script.setProperty(QLatin1String("require"),             func_require);
-	script.setProperty(QLatin1String("requireOnce"),         func_require_once);
-	global.setProperty(QLatin1String("quit"),                func_quit);
-	global.setProperty(QLatin1String("require"),             func_require);
-	global.setProperty(QLatin1String("requireOnce"),         func_require_once);
+	script.setProperty(g_quit,  func_quit);
+	script.setProperty(g_req,   func_require);
+	script.setProperty(g_ronce, func_require_once);
+	global.setProperty(g_quit,  func_quit);
+	global.setProperty(g_req,   func_require);
+	global.setProperty(g_ronce, func_require_once);
+
 	script.setProperty(QLatin1String("extension"),           func_import);
 	global.setProperty(QLatin1String("import"),              func_import);
 	script.setProperty(QLatin1String("availableExtensions"), this->m_eng->newFunction(MyApplication::availableExtensions));
