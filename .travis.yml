@@ -7,11 +7,13 @@ compiler:
 branches:
   only:
     - master
+  
+sudo: false
 
-install:
-  - sudo apt-get update -qq
-  - sudo apt-get install -qq libqt4-dev
+addons:
+  apt:
+    packages:
+    - libqt4-dev
 
 script:
-  - qmake
-  - make
+  - qmake && make
